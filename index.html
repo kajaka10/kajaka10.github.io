@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0d12">
+  <meta name="description" content="Słoik – wrzucaj kulkę za każdą dobrą rzecz, którą zrobiłeś.">
+  <title>Słoik</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <main>
+      <!-- ===== DZIŚ ===== -->
+      <section id="view-today" class="view active" aria-label="Dzisiejszy słoik">
+        <header class="top">
+          <h1>Dziś</h1>
+          <p id="todayDate" class="sub"></p>
+        </header>
+
+        <div id="jarBox" class="jar-box">
+          <canvas id="jarCanvas" role="img" aria-label="Słoik z dzisiejszymi kulkami"></canvas>
+        </div>
+
+        <div class="counts" id="todayCounts"></div>
+
+        <div class="ball-buttons">
+          <button class="ball-btn blue" data-color="blue">
+            <span class="dot"></span>
+            <span class="t">Niebieska</span>
+            <span class="s">mało ważne</span>
+          </button>
+          <button class="ball-btn yellow" data-color="yellow">
+            <span class="dot"></span>
+            <span class="t">Żółta</span>
+            <span class="s">średnio ważne</span>
+          </button>
+          <button class="ball-btn red" data-color="red">
+            <span class="dot"></span>
+            <span class="t">Czerwona</span>
+            <span class="s">bardzo ważne</span>
+          </button>
+        </div>
+
+        <button id="undoBtn" class="ghost undo" disabled>↶ Cofnij ostatnią kulkę</button>
+      </section>
+
+      <!-- ===== KALENDARZ ===== -->
+      <section id="view-calendar" class="view" aria-label="Kalendarz">
+        <header class="top cal-head">
+          <button id="prevMonth" class="icon-btn" aria-label="Poprzedni miesiąc">‹</button>
+          <h1 id="monthTitle"></h1>
+          <button id="nextMonth" class="icon-btn" aria-label="Następny miesiąc">›</button>
+        </header>
+        <div class="weekdays">
+          <span>Pn</span><span>Wt</span><span>Śr</span><span>Cz</span><span>Pt</span><span>So</span><span>Nd</span>
+        </div>
+        <div id="calGrid" class="cal-grid"></div>
+        <p class="hint">Kliknij dzień, żeby zobaczyć jego słoik.</p>
+      </section>
+
+      <!-- ===== KOPIA ===== -->
+      <section id="view-backup" class="view" aria-label="Kopia zapasowa">
+        <header class="top">
+          <h1>Kopia zapasowa</h1>
+          <p class="sub">Dane są tylko na tym telefonie.</p>
+        </header>
+
+        <div class="card">
+          <p id="dataInfo" class="data-info">…</p>
+          <p id="lastExport" class="muted"></p>
+          <button id="exportBtn" class="primary big">⬇ Eksportuj dane</button>
+          <button id="shareBtn" class="secondary big" hidden>↗ Udostępnij plik kopii</button>
+          <label class="secondary big file-label">
+            ⬆ Importuj dane
+            <input id="importInput" type="file" accept="application/json,.json">
+          </label>
+        </div>
+
+        <div class="card muted-card">
+          <p><b>Eksport</b> zapisuje plik <code>sloik-kopia-RRRR-MM-DD.json</code> w Pobranych. Przenieś go na Dysk Google albo wyślij sobie mailem.</p>
+          <p><b>Import</b> dokłada kulki z pliku do tych, które już są. Niczego nie kasuje, a duplikaty pomija.</p>
+          <p>Rób kopię mniej więcej raz w tygodniu.</p>
+        </div>
+      </section>
+    </main>
+
+    <nav class="tabs" aria-label="Nawigacja">
+      <button class="tab active" data-view="today"><span class="ico">🫙</span>Dziś</button>
+      <button class="tab" data-view="calendar"><span class="ico">📅</span>Kalendarz</button>
+      <button class="tab" data-view="backup"><span class="ico">💾</span>Kopia</button>
+    </nav>
+  </div>
+
+  <!-- Pole „za co?” po wrzuceniu kulki -->
+  <div id="noteSheet" class="note-sheet" aria-hidden="true">
+    <div class="note-row">
+      <span id="noteDot" class="mini-dot"></span>
+      <input id="noteInput" type="text" maxlength="120" placeholder="Za co? (możesz pominąć)" enterkeyhint="done" autocomplete="off">
+    </div>
+    <div class="note-actions">
+      <button id="noteSkip" class="ghost">Pomiń</button>
+      <button id="noteSave" class="primary">Zapisz</button>
+    </div>
+  </div>
+
+  <!-- Szczegóły dnia -->
+  <div id="dayView" class="day-view" hidden>
+    <header class="top day-head">
+      <button id="dayBack" class="icon-btn" aria-label="Wróć">‹</button>
+      <div>
+        <h1 id="dayTitle"></h1>
+        <p id="daySub" class="sub"></p>
+      </div>
+    </header>
+    <div id="dayJarBox" class="jar-box day-jar">
+      <canvas id="dayCanvas" role="img" aria-label="Słoik z wybranego dnia"></canvas>
+    </div>
+    <div class="counts" id="dayCounts"></div>
+    <ul id="dayList" class="ball-list"></ul>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

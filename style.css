@@ -1,0 +1,343 @@
+/* ============ Słoik – style ============ */
+:root {
+  --bg: #0b0d12;
+  --bg2: #12161f;
+  --card: #161b26;
+  --line: #262d3b;
+  --text: #e9ecf3;
+  --muted: #8b93a7;
+  --blue: #3b82f6;
+  --yellow: #facc15;
+  --red: #ef4444;
+  --accent: #7aa2ff;
+  --radius: 18px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  overscroll-behavior: none;
+}
+
+body {
+  background:
+    radial-gradient(120% 60% at 50% 0%, #161c2b 0%, var(--bg) 60%) fixed;
+}
+
+button { font: inherit; color: inherit; touch-action: manipulation; cursor: pointer; }
+button:disabled { opacity: .35; cursor: default; }
+
+.app {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+main {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+/* ---------- Widoki ---------- */
+.view {
+  position: absolute;
+  inset: 0;
+  display: none;
+  flex-direction: column;
+  padding: calc(var(--safe-top) + 12px) 16px 12px;
+  overflow-y: auto;
+}
+.view.active { display: flex; }
+
+.top { margin-bottom: 6px; }
+.top h1 { margin: 0; font-size: 26px; font-weight: 700; letter-spacing: -.01em; }
+.sub { margin: 2px 0 0; color: var(--muted); font-size: 15px; }
+.muted { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
+
+/* ---------- Słoik ---------- */
+.jar-box {
+  flex: 1 1 0;
+  min-height: 180px;
+  position: relative;
+  overflow: hidden;
+}
+.jar-box canvas {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: block;
+}
+
+/* ---------- Liczniki ---------- */
+.counts {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin: 8px 0 12px;
+}
+.count {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 17px;
+}
+.count .mini-dot { width: 14px; height: 14px; }
+
+.mini-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex: none;
+}
+.mini-dot.blue   { background: radial-gradient(circle at 35% 30%, #b9d4ff, var(--blue) 55%, #1d3f8f); }
+.mini-dot.yellow { background: radial-gradient(circle at 35% 30%, #fff6bf, var(--yellow) 55%, #a16207); }
+.mini-dot.red    { background: radial-gradient(circle at 35% 30%, #ffc4c4, var(--red) 55%, #8b1c1c); }
+
+/* ---------- Przyciski kulek ---------- */
+.ball-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.ball-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 14px 6px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--card);
+  transition: transform .08s ease, background .2s;
+  user-select: none;
+}
+.ball-btn:active { transform: scale(.94); }
+.ball-btn .dot {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  margin-bottom: 4px;
+  box-shadow: 0 6px 14px rgba(0,0,0,.45);
+}
+.ball-btn .t { font-weight: 700; font-size: 16px; }
+.ball-btn .s { font-size: 12px; color: var(--muted); }
+.ball-btn.blue   { background: linear-gradient(180deg, rgba(59,130,246,.18), var(--card)); border-color: rgba(59,130,246,.35); }
+.ball-btn.yellow { background: linear-gradient(180deg, rgba(250,204,21,.16), var(--card)); border-color: rgba(250,204,21,.32); }
+.ball-btn.red    { background: linear-gradient(180deg, rgba(239,68,68,.18), var(--card)); border-color: rgba(239,68,68,.35); }
+.ball-btn.blue .dot   { background: radial-gradient(circle at 35% 30%, #b9d4ff, var(--blue) 55%, #1d3f8f); }
+.ball-btn.yellow .dot { background: radial-gradient(circle at 35% 30%, #fff6bf, var(--yellow) 55%, #a16207); }
+.ball-btn.red .dot    { background: radial-gradient(circle at 35% 30%, #ffc4c4, var(--red) 55%, #8b1c1c); }
+
+.ghost {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 16px;
+  color: var(--muted);
+}
+.undo { margin-top: 10px; width: 100%; font-size: 15px; }
+
+.primary, .secondary {
+  border-radius: 14px;
+  padding: 12px 18px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+.primary { background: var(--accent); color: #0b0d12; }
+.secondary { background: var(--card); border-color: var(--line); }
+.big { display: block; width: 100%; padding: 16px; font-size: 17px; margin-top: 10px; text-align: center; }
+
+/* ---------- Dolna nawigacja ---------- */
+.tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-top: 1px solid var(--line);
+  background: rgba(11,13,18,.92);
+  backdrop-filter: blur(10px);
+  padding-bottom: var(--safe-bottom);
+}
+.tab {
+  background: none;
+  border: none;
+  padding: 10px 0 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.tab .ico { font-size: 22px; filter: grayscale(1) opacity(.6); }
+.tab.active { color: var(--text); }
+.tab.active .ico { filter: none; }
+
+/* ---------- Kalendarz ---------- */
+.cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.cal-head h1 { font-size: 22px; text-align: center; flex: 1; }
+.icon-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  font-size: 26px;
+  line-height: 1;
+}
+.weekdays, .cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 5px;
+}
+.weekdays { margin: 10px 0 6px; }
+.weekdays span { text-align: center; font-size: 12px; color: var(--muted); }
+.cal-cell {
+  border: 1px solid transparent;
+  background: var(--bg2);
+  border-radius: 10px;
+  padding: 3px 2px 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 64px;
+  min-width: 0;
+  overflow: hidden;
+}
+.cal-cell .num { font-size: 12px; color: var(--muted); line-height: 1.2; }
+.cal-cell canvas { display: block; margin-top: 1px; width: 0; height: 0; }
+.cal-cell.has .num { color: var(--text); font-weight: 600; }
+.cal-cell.today { border-color: var(--accent); }
+.cal-cell.future { opacity: .3; }
+.cal-cell.empty { background: transparent; }
+.hint { color: var(--muted); font-size: 13px; text-align: center; margin: 14px 0 0; }
+
+/* ---------- Kopia ---------- */
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-top: 12px;
+}
+.muted-card { color: var(--muted); font-size: 14px; line-height: 1.5; }
+.muted-card p { margin: 0 0 8px; }
+.muted-card p:last-child { margin: 0; }
+.data-info { margin: 0 0 4px; font-size: 16px; }
+.file-label { position: relative; cursor: pointer; }
+.file-label input { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
+code { font-size: 12px; color: var(--text); }
+
+/* ---------- Pole „za co?” ---------- */
+.note-sheet {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  top: calc(var(--safe-top) + 10px);
+  background: #1a2030;
+  border: 1px solid #2c3446;
+  border-radius: var(--radius);
+  padding: 12px;
+  box-shadow: 0 16px 40px rgba(0,0,0,.55);
+  transform: translateY(-140%);
+  transition: transform .25s ease;
+  z-index: 20;
+}
+.note-sheet.open { transform: translateY(0); }
+.note-row { display: flex; align-items: center; gap: 10px; }
+.note-row .mini-dot { width: 22px; height: 22px; }
+.note-row input {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 12px;
+  font-size: 16px; /* 16px = brak auto-zoomu na telefonie */
+}
+.note-row input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.note-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.note-actions button { padding: 10px 18px; }
+
+/* ---------- Szczegóły dnia ---------- */
+.day-view {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  padding: calc(var(--safe-top) + 12px) 16px calc(var(--safe-bottom) + 12px);
+  overflow-y: auto;
+}
+.day-view[hidden] { display: none; }
+.day-head { display: flex; align-items: center; gap: 12px; }
+.day-head h1 { font-size: 21px; }
+.day-jar { flex: none; height: 42vh; min-height: 220px; }
+.ball-list { list-style: none; margin: 0; padding: 0; }
+.ball-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--line);
+}
+.ball-list .time { color: var(--muted); font-variant-numeric: tabular-nums; width: 44px; flex: none; font-size: 14px; }
+.ball-list .note { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.ball-list .note.empty { color: var(--muted); font-style: italic; }
+.ball-list .edit {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 18px;
+  padding: 4px 8px;
+}
+.ball-list .empty-day { color: var(--muted); justify-content: center; border: none; }
+
+/* ---------- Toast ---------- */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--safe-bottom) + 84px);
+  transform: translate(-50%, 20px);
+  background: #232a3a;
+  border: 1px solid #323b50;
+  padding: 10px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s, transform .2s;
+  z-index: 30;
+  max-width: calc(100% - 32px);
+  text-align: center;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* Małe telefony */
+@media (max-height: 640px) {
+  .ball-btn { padding: 10px 4px 8px; }
+  .ball-btn .dot { width: 30px; height: 30px; }
+  .ball-btn .s { display: none; }
+  .top h1 { font-size: 22px; }
+}

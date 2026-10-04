@@ -6,9 +6,9 @@
 
 /* ---------- Kolory kulek ---------- */
 const COLORS = {
-  blue:   { name: 'Niebieska', label: 'mało ważne',    light: '#b9d4ff', base: '#3b82f6', dark: '#1d3f8f', vibrate: 15 },
-  yellow: { name: 'Żółta',     label: 'średnio ważne', light: '#fff6bf', base: '#facc15', dark: '#a16207', vibrate: 35 },
-  red:    { name: 'Czerwona',  label: 'bardzo ważne',  light: '#ffc4c4', base: '#ef4444', dark: '#8b1c1c', vibrate: [40, 50, 40] },
+  blue:   { name: 'Niebieska', acc: 'niebieską', label: 'mało ważne',    light: '#b9d4ff', base: '#3b82f6', dark: '#1d3f8f', vibrate: 15 },
+  yellow: { name: 'Żółta',     acc: 'żółtą',     label: 'średnio ważne', light: '#fff6bf', base: '#facc15', dark: '#a16207', vibrate: 35 },
+  red:    { name: 'Czerwona',  acc: 'czerwoną',  label: 'bardzo ważne',  light: '#ffc4c4', base: '#ef4444', dark: '#8b1c1c', vibrate: [40, 50, 40] },
 };
 const ORDER = ['blue', 'yellow', 'red'];
 
@@ -240,8 +240,8 @@ function packPositions(n, r, g, limitY) {
 }
 
 // Im więcej kulek, tym mniejsze – żeby zawsze mieściły się w słoiku
-function radiusFor(n, g) {
-  let r = g.W * 0.06;
+function radiusFor(n, g, start = 0.06) {
+  let r = g.W * start;
   const minR = g.W * 0.012, limit = g.H * 0.27;
   while (r > minR && !packPositions(Math.max(n, 1), r, g, limit)) r *= 0.94;
   return r;
@@ -296,7 +296,8 @@ class JarView {
 
   // Ustawia kulki od razu na dnie (bez animacji)
   setData(list, forcedR) {
-    this.r = forcedR || radiusFor(list.length, this.g);
+    // miniaturki: większe kulki, żeby było je widać
+    this.r = forcedR || radiusFor(list.length, this.g, this.simple ? 0.1 : 0.06);
     const pos = packPositions(list.length, this.r, this.g, -Infinity) || [];
     this.balls = list.map((d, i) => {
       const p = pos[i] || { x: this.g.W / 2, y: this.g.H * 0.3 };
@@ -406,6 +407,16 @@ class JarView {
 /* =========================================================
    APLIKACJA
    ========================================================= */
+const LS = {
+  get(k, def = null) { try { const v = localStorage.getItem(k); return v === null ? def : JSON.parse(v); } catch (e) { return def; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* ignoruj */ } },
+  del(k) { try { localStorage.removeItem(k); } catch (e) { /* ignoruj */ } },
+};
+
+// stały identyfikator tego telefonu (żeby odróżnić moje kulki od cudzych)
+let ME = LS.get('sloik-me');
+if (!ME) { ME = 'u' + uid() + Math.random().toString(36).slice(2, 8); LS.set('sloik-me', ME); }
+
 const state = {
   today: dateKey(),
   todayBalls: [],
@@ -413,14 +424,32 @@ const state = {
   noteFor: null,
   noteTimer: 0,
   view: 'today',
+  // tryb Razem
+  pair: LS.get('sloik-pair'),        // { room, name } albo null
+  sync: null,                         // połączenie z Firebase
+  syncModule: null,
+  members: [],
+  partnerToday: [],
+  stopToday: null,
+  watchStart: 0,
 };
 
-let todayJar, dayJar;
+let todayJar, partnerJar, dayJar, dayPartnerJar;
 
-function fitJar(view, box) {
-  const w = box.clientWidth, h = box.clientHeight;
+const paired = () => !!(state.pair && state.sync);
+
+function partnerInfo() {
+  const others = state.members.filter((m) => m.id !== ME).sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
+  return others[0] || null;
+}
+const partnerName = () => (partnerInfo() ? partnerInfo().name : 'Druga osoba');
+const myName = () => (state.pair && state.pair.name) || 'Ja';
+
+function fitJar(view, slot) {
+  const w = slot.clientWidth, h = slot.clientHeight;
   if (!w || !h) return false;
   const jw = Math.floor(Math.min(w, h * 0.75, 420));
+  if (jw < 20) return false;
   view.setSize(jw, Math.floor(jw / 0.75));
   return true;
 }
@@ -444,11 +473,13 @@ async function loadToday() {
   $('#todayDate').textContent = cap(new Date().toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' }));
   todayJar.setData(state.todayBalls);
   updateToday();
+  if (paired()) watchToday();
 }
 
 function updateToday() {
   renderCounts($('#todayCounts'), state.todayBalls);
   $('#undoBtn').disabled = state.todayBalls.length === 0;
+  if (paired()) renderCounts($('#partnerCounts'), state.partnerToday);
 }
 
 async function addBall(color) {
@@ -465,6 +496,7 @@ async function addBall(color) {
 
   try { await DB.put(ball); }
   catch (e) { toast('Nie udało się zapisać kulki: ' + e.message); }
+  if (state.sync) state.sync.pushBall(ball).catch(() => {});
 }
 
 async function undoLast() {
@@ -476,6 +508,7 @@ async function undoLast() {
   if (navigator.vibrate) navigator.vibrate(10);
   try { await DB.remove(last.id); toast('Cofnięto ostatnią kulkę'); }
   catch (e) { toast('Błąd: ' + e.message); }
+  if (state.sync) state.sync.removeBall(last.id).catch(() => {});
 }
 
 /* ---------- Pole „za co?” ---------- */
@@ -517,10 +550,14 @@ async function saveNote(id, text) {
   if (!b) return;
   b.note = note;
   try { await DB.put(b); } catch (e) { toast('Błąd zapisu opisu'); }
+  if (state.sync) state.sync.pushBall(b).catch(() => {});
 }
 
 /* ---------- Kalendarz ---------- */
+let calToken = 0;
+
 async function renderCalendar() {
+  const token = ++calToken;
   const y = state.month.getFullYear(), m = state.month.getMonth();
   const first = new Date(y, m, 1);
   const days = new Date(y, m + 1, 0).getDate();
@@ -530,12 +567,14 @@ async function renderCalendar() {
   const now = new Date();
   $('#nextMonth').disabled = y > now.getFullYear() || (y === now.getFullYear() && m >= now.getMonth());
 
-  const data = await DB.range(dateKey(first), dateKey(new Date(y, m, days)));
-  const byDay = {};
-  for (const b of data) (byDay[b.date] = byDay[b.date] || []).push(b);
+  const from = dateKey(first), to = dateKey(new Date(y, m, days));
+  const mine = groupByDay(await DB.range(from, to));
+  if (token !== calToken) return;
+  const two = paired();
 
   const grid = $('#calGrid');
   grid.innerHTML = '';
+  grid.classList.toggle('paired-cal', two);
   for (let i = 0; i < offset; i++) {
     const e = document.createElement('div');
     e.className = 'cal-cell empty';
@@ -546,7 +585,7 @@ async function renderCalendar() {
   const cells = [];
   for (let d = 1; d <= days; d++) {
     const key = dateKey(new Date(y, m, d));
-    const list = byDay[key] || [];
+    const list = mine[key] || [];
     const cell = document.createElement('button');
     cell.className = 'cal-cell';
     if (list.length) cell.classList.add('has');
@@ -556,51 +595,108 @@ async function renderCalendar() {
     cell.setAttribute('aria-label', `${d}: ${list.length} ${plural(list.length, 'kulka', 'kulki', 'kulek')}`);
     cell.innerHTML = `<span class="num">${d}</span>`;
     if (!future) {
+      const jars = document.createElement('div');
+      jars.className = 'jars';
       const cv = document.createElement('canvas');
-      cell.appendChild(cv);
-      cells.push({ cv, list });
+      jars.appendChild(cv);
+      let pcv = null;
+      if (two) { pcv = document.createElement('canvas'); jars.appendChild(pcv); }
+      cell.appendChild(jars);
+      cells.push({ key, cv, pcv, list, cell });
       cell.addEventListener('click', () => openDay(key));
     }
     grid.appendChild(cell);
   }
 
+  $('#calHint').innerHTML = two
+    ? `<span class="legend"><span>górny: <b>${escapeHtml(myName())}</b></span><span>dolny: <b class="p">${escapeHtml(partnerName())}</b></span></span>`
+    : 'Kliknij dzień, żeby zobaczyć jego słoik.';
+
   // miniaturki słoików (po ułożeniu siatki znamy szerokość komórki)
-  requestAnimationFrame(() => {
-    for (const { cv, list } of cells) {
-      const w = Math.max(24, Math.floor(cv.parentElement.clientWidth * 0.82));
-      const v = new JarView(cv, { simple: true });
-      v.setSize(w, Math.floor(w / 0.75));
-      v.setData(list);
+  const partnerViews = [];
+  await new Promise((r) => requestAnimationFrame(r));
+  for (const { cv, pcv, list, key, cell } of cells) {
+    const full = cell.clientWidth;
+    // w trybie Razem dwa słoiki jeden nad drugim (obok siebie byłyby za wąskie)
+    const w = Math.max(16, Math.floor(full * (two ? 0.62 : 0.82)));
+    const v = new JarView(cv, { simple: true });
+    v.setSize(w, Math.floor(w / 0.75));
+    v.setData(list);
+    if (pcv) {
+      const pv = new JarView(pcv, { simple: true });
+      pv.setSize(w, Math.floor(w / 0.75));
+      pv.setData([]);
+      partnerViews.push({ key, pv });
     }
-  });
+  }
+
+  // kulki drugiej osoby (z internetu albo z pamięci podręcznej)
+  if (two && partnerViews.length) {
+    try {
+      const theirs = groupByDay((await state.sync.range(from, to)).filter((b) => b.who !== ME));
+      if (token !== calToken) return;
+      for (const { key, pv } of partnerViews) pv.setData(sortByTs(theirs[key] || []));
+    } catch (e) { /* offline – zostają puste */ }
+  }
 }
+
+function groupByDay(list) {
+  const out = {};
+  for (const b of list) (out[b.date] = out[b.date] || []).push(b);
+  return out;
+}
+const sortByTs = (list) => list.slice().sort((a, b) => a.ts - b.ts);
+const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 /* ---------- Szczegóły dnia ---------- */
 let dayKeyOpen = null;
 
 async function openDay(key, push = true) {
   dayKeyOpen = key;
-  const list = await DB.byDate(key);
+  const mine = await DB.byDate(key);
+  const two = paired();
+  let theirs = [];
+  if (two) {
+    try { theirs = sortByTs((await state.sync.range(key, key)).filter((b) => b.who !== ME)); }
+    catch (e) { theirs = []; }
+  }
+  if (dayKeyOpen !== key) return;
+
   const date = parseKey(key);
   $('#dayTitle').textContent = cap(date.toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' }));
-  $('#daySub').textContent = `${list.length} ${plural(list.length, 'kulka', 'kulki', 'kulek')}` + (date.getFullYear() !== new Date().getFullYear() ? ` · ${date.getFullYear()}` : '');
+  const total = (n) => `${n} ${plural(n, 'kulka', 'kulki', 'kulek')}`;
+  $('#daySub').textContent = (two ? `${myName()}: ${total(mine.length)} · ${partnerName()}: ${total(theirs.length)}` : total(mine.length)) +
+    (date.getFullYear() !== new Date().getFullYear() ? ` · ${date.getFullYear()}` : '');
+
   const dv = $('#dayView');
   dv.hidden = false;
+  dv.classList.toggle('paired', two);
   if (push) history.pushState({ day: key }, '');
 
-  fitJar(dayJar, $('#dayJarBox'));
-  dayJar.setData(list);
-  renderCounts($('#dayCounts'), list);
+  $('#dayMeName').hidden = !two;
+  $('#dayMeName').textContent = myName();
+  $('#dayPartnerCol').hidden = !two;
+  $('#dayPartnerName').textContent = partnerName();
 
+  await new Promise((r) => requestAnimationFrame(r));
+  if (fitJar(dayJar, $('#dayMeSlot'))) dayJar.setData(mine);
+  renderCounts($('#dayCounts'), mine);
+  if (two) {
+    if (fitJar(dayPartnerJar, $('#dayPartnerSlot'))) dayPartnerJar.setData(theirs);
+    renderCounts($('#dayPartnerCounts'), theirs);
+  }
+
+  // wspólna lista, posortowana po godzinie
+  const all = sortByTs([...mine.map((b) => ({ ...b, mine: true })), ...theirs.map((b) => ({ ...b, mine: false }))]);
   const ul = $('#dayList');
   ul.innerHTML = '';
-  if (!list.length) {
+  if (!all.length) {
     const li = document.createElement('li');
     li.className = 'empty-day';
     li.textContent = 'Tego dnia słoik był pusty.';
     ul.appendChild(li);
   }
-  for (const b of list) {
+  for (const b of all) {
     const li = document.createElement('li');
     const time = document.createElement('span');
     time.className = 'time';
@@ -610,21 +706,32 @@ async function openDay(key, push = true) {
     const note = document.createElement('span');
     note.className = 'note' + (b.note ? '' : ' empty');
     note.textContent = b.note || 'bez opisu';
-    const edit = document.createElement('button');
-    edit.className = 'edit';
-    edit.setAttribute('aria-label', 'Edytuj opis');
-    edit.textContent = '✎';
-    edit.addEventListener('click', async () => {
-      const text = prompt('Za co ta kulka?', b.note || '');
-      if (text === null) return;
-      b.note = text.trim().slice(0, 120);
-      await DB.put(b);
-      const t = state.todayBalls.find((x) => x.id === b.id);
-      if (t) t.note = b.note;
-      note.textContent = b.note || 'bez opisu';
-      note.className = 'note' + (b.note ? '' : ' empty');
-    });
-    li.append(time, dot, note, edit);
+    li.append(time, dot, note);
+    if (two) {
+      const who = document.createElement('span');
+      who.className = 'person' + (b.mine ? '' : ' partner');
+      who.textContent = b.mine ? myName() : partnerName();
+      li.appendChild(who);
+    }
+    if (b.mine) {
+      const edit = document.createElement('button');
+      edit.className = 'edit';
+      edit.setAttribute('aria-label', 'Edytuj opis');
+      edit.textContent = '✎';
+      edit.addEventListener('click', async () => {
+        const text = prompt('Za co ta kulka?', b.note || '');
+        if (text === null) return;
+        const rec = { id: b.id, date: b.date, ts: b.ts, color: b.color, note: text.trim().slice(0, 120) };
+        await DB.put(rec);
+        if (state.sync) state.sync.pushBall(rec).catch(() => {});
+        const t = state.todayBalls.find((x) => x.id === b.id);
+        if (t) t.note = rec.note;
+        b.note = rec.note;
+        note.textContent = rec.note || 'bez opisu';
+        note.className = 'note' + (rec.note ? '' : ' empty');
+      });
+      li.appendChild(edit);
+    }
     ul.appendChild(li);
   }
 }
@@ -632,6 +739,166 @@ async function openDay(key, push = true) {
 function closeDay() {
   $('#dayView').hidden = true;
   dayKeyOpen = null;
+}
+
+/* =========================================================
+   TRYB RAZEM
+   ========================================================= */
+const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+function newRoomCode() {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join('');
+}
+const formatCode = (c) => c.match(/.{1,4}/g).join('-');
+const normalizeCode = (s) => s.toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+async function loadSyncModule() {
+  if (!state.syncModule) state.syncModule = await import('./sync.js');
+  return state.syncModule;
+}
+
+async function startSync() {
+  if (!state.pair) return;
+  try {
+    const mod = await loadSyncModule();
+    if (!mod.isConfigured()) return;
+    state.sync = await mod.connect(state.pair.room, ME, (code) => {
+      toast('Błąd połączenia z Firebase: ' + code + '. Wyślij to Claude 🙂');
+    });
+  } catch (e) {
+    console.warn(e);
+    toast('Nie udało się połączyć wspólnego słoika');
+    return;
+  }
+  state.sync.watchMembers((members) => {
+    state.members = members;
+    applyPairedLayout();
+    if (state.view === 'together') renderTogether();
+  });
+  applyPairedLayout();
+  watchToday();
+}
+
+function watchToday() {
+  if (state.stopToday) state.stopToday();
+  state.partnerToday = [];
+  state.watchStart = Date.now();
+  const key = state.today;
+  state.stopToday = state.sync.watchDay(key, (list, changes, first) => {
+    if (key !== state.today) return;
+    const theirs = sortByTs(list.filter((b) => b.who !== ME));
+    if (first) {
+      state.partnerToday = theirs;
+      partnerJar.setData(theirs);
+      updateToday();
+      return;
+    }
+    let reset = false;
+    for (const { type, ball } of changes) {
+      if (ball.who === ME) continue;
+      const known = partnerJar.balls.some((x) => x.id === ball.id);
+      if (type === 'added' && !known) {
+        if (ball.ts > state.watchStart - 60000) {
+          partnerJar.drop(ball);
+          toast(`${partnerName()} wrzuca ${COLORS[ball.color].acc} kulkę${ball.note ? ': ' + ball.note : ''}`);
+        } else {
+          reset = true;
+        }
+      } else if (type === 'removed' && known) {
+        partnerJar.remove(ball.id);
+      }
+    }
+    state.partnerToday = theirs;
+    if (reset) partnerJar.setData(theirs);
+    updateToday();
+  });
+}
+
+function applyPairedLayout() {
+  const two = paired();
+  $('#view-today').classList.toggle('paired', two);
+  $('#partnerCol').hidden = !two;
+  $('#meName').hidden = !two;
+  $('#meName').textContent = myName();
+  $('#partnerName').textContent = partnerInfo() ? partnerName() : 'czekam na drugą osobę…';
+  // przelicz rozmiary słoików po zmianie układu
+  requestAnimationFrame(() => {
+    if (fitJar(todayJar, $('#meSlot'))) todayJar.setData(state.todayBalls);
+    if (two && fitJar(partnerJar, $('#partnerSlot'))) partnerJar.setData(state.partnerToday);
+  });
+}
+
+async function renderTogether() {
+  let configured = false;
+  try { configured = (await loadSyncModule()).isConfigured(); } catch (e) { configured = false; }
+  $('#tgNoConfig').hidden = configured;
+  $('#tgSetup').hidden = !configured || !!state.pair;
+  $('#tgPaired').hidden = !configured || !state.pair;
+  if (!configured) return;
+  if (!state.pair) {
+    $('#tgName').value = LS.get('sloik-name', '') || '';
+    return;
+  }
+  $('#tgRoom').textContent = formatCode(state.pair.room);
+  const p = partnerInfo();
+  $('#tgStatus').textContent = p
+    ? `Połączono: ${myName()} + ${p.name} 🎉`
+    : 'Czekam, aż druga osoba wpisze kod…';
+}
+
+async function pairWith(room) {
+  const name = $('#tgName').value.trim();
+  if (!name) { toast('Wpisz najpierw swoje imię'); $('#tgName').focus(); return; }
+  LS.set('sloik-name', name);
+  state.pair = { room, name };
+  LS.set('sloik-pair', state.pair);
+  await startSync();
+  if (!state.sync) { state.pair = null; LS.del('sloik-pair'); return; }
+  renderTogether();
+  // zapis imienia i całej historii idzie w tle (offline – wyśle się później)
+  state.sync.setMember(name).catch((e) => toast('Błąd zapisu imienia: ' + (e.code || e.message)));
+  DB.all().then((all) => state.sync.pushMany(all)).catch(() => {});
+}
+
+async function createRoom() {
+  await pairWith(newRoomCode());
+  if (state.pair) toast('Wspólny słoik gotowy, wyślij kod drugiej osobie');
+}
+
+async function joinRoom() {
+  const code = normalizeCode($('#tgCode').value);
+  if (code.length !== 16) { toast('Kod ma 16 znaków, np. ABCD-EFGH-JKLM-NPQR'); return; }
+  await pairWith(code);
+  if (state.pair) toast('Dołączono do wspólnego słoika 🎉');
+}
+
+function leaveRoom() {
+  if (!confirm('Opuścić wspólny słoik? Twoje kulki zostają na telefonie.')) return;
+  if (state.stopToday) state.stopToday();
+  if (state.sync) state.sync.close();
+  state.sync = null;
+  state.pair = null;
+  state.members = [];
+  state.partnerToday = [];
+  LS.del('sloik-pair');
+  applyPairedLayout();
+  renderTogether();
+}
+
+async function shareCode() {
+  const code = formatCode(state.pair.room);
+  const text = `Dołącz do mojego Słoika! Wejdź w zakładkę Razem i wpisz kod: ${code}`;
+  if (navigator.share) {
+    try { await navigator.share({ text }); return; } catch (e) { if (e.name === 'AbortError') return; }
+  }
+  copyCode();
+}
+
+async function copyCode() {
+  try { await navigator.clipboard.writeText(formatCode(state.pair.room)); toast('Skopiowano kod'); }
+  catch (e) { toast('Nie udało się skopiować, przepisz kod ręcznie'); }
 }
 
 /* ---------- Kopia zapasowa ---------- */
@@ -644,7 +911,7 @@ async function buildExport() {
 }
 
 function markExported() {
-  try { localStorage.setItem('sloik-last-export', String(Date.now())); } catch (e) { /* ignoruj */ }
+  LS.set('sloik-last-export', Date.now());
   updateBackupInfo();
 }
 
@@ -692,6 +959,7 @@ async function importData(file) {
     const existing = new Set((await DB.all()).map((b) => b.id));
     const fresh = clean.filter((b) => !existing.has(b.id));
     await DB.putMany(fresh);
+    if (state.sync && fresh.length) state.sync.pushMany(fresh).catch(() => {});
     await loadToday();
     if (state.view === 'calendar') renderCalendar();
     updateBackupInfo();
@@ -706,8 +974,7 @@ async function updateBackupInfo() {
   const all = await DB.all();
   const days = new Set(all.map((b) => b.date)).size;
   $('#dataInfo').textContent = `Na telefonie: ${all.length} ${plural(all.length, 'kulka', 'kulki', 'kulek')} z ${days} ${plural(days, 'dnia', 'dni', 'dni')}.`;
-  let last = null;
-  try { last = localStorage.getItem('sloik-last-export'); } catch (e) { /* ignoruj */ }
+  const last = LS.get('sloik-last-export');
   $('#lastExport').textContent = last
     ? 'Ostatni eksport: ' + new Date(Number(last)).toLocaleString('pl-PL', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
     : 'Nie zrobiłeś jeszcze kopii.';
@@ -720,7 +987,7 @@ function toast(msg) {
   t.textContent = msg;
   t.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
 }
 
 let persistAsked = false;
@@ -736,8 +1003,9 @@ function showView(name) {
   for (const v of document.querySelectorAll('.view')) v.classList.toggle('active', v.id === 'view-' + name);
   for (const t of document.querySelectorAll('.tab')) t.classList.toggle('active', t.dataset.view === name);
   if (name !== 'today') closeNote(true);
-  if (name === 'today' && fitJar(todayJar, $('#jarBox'))) todayJar.setData(state.todayBalls);
+  if (name === 'today') applyPairedLayout();
   if (name === 'calendar') renderCalendar();
+  if (name === 'together') renderTogether();
   if (name === 'backup') updateBackupInfo();
 }
 
@@ -752,9 +1020,11 @@ function checkNewDay() {
 /* ---------- Start ---------- */
 async function init() {
   todayJar = new JarView($('#jarCanvas'));
+  partnerJar = new JarView($('#partnerCanvas'));
   dayJar = new JarView($('#dayCanvas'));
+  dayPartnerJar = new JarView($('#dayPartnerCanvas'));
   updateToday(); // liczniki od razu, żeby słoik znał swoje miejsce
-  fitJar(todayJar, $('#jarBox'));
+  fitJar(todayJar, $('#meSlot'));
 
   for (const btn of document.querySelectorAll('.ball-btn')) {
     btn.addEventListener('click', () => addBall(btn.dataset.color));
@@ -775,6 +1045,16 @@ async function init() {
   $('#dayBack').addEventListener('click', () => history.back());
   window.addEventListener('popstate', () => { if (!$('#dayView').hidden) closeDay(); });
 
+  $('#tgCreate').addEventListener('click', createRoom);
+  $('#tgJoin').addEventListener('click', joinRoom);
+  $('#tgLeave').addEventListener('click', leaveRoom);
+  $('#tgShare').addEventListener('click', shareCode);
+  $('#tgCopy').addEventListener('click', copyCode);
+  $('#tgCode').addEventListener('input', (e) => {
+    const c = normalizeCode(e.target.value).slice(0, 16);
+    e.target.value = c ? formatCode(c) : '';
+  });
+
   $('#exportBtn').addEventListener('click', exportData);
   if (navigator.canShare && navigator.canShare({ files: [new File(['{}'], 't.json', { type: 'application/json' })] })) {
     $('#shareBtn').hidden = false;
@@ -786,15 +1066,20 @@ async function init() {
     e.target.value = '';
   });
 
-  // dopasuj słoik, gdy zmieni się dostępne miejsce (obrót ekranu, klawiatura itp.)
-  let lastBox = '';
-  new ResizeObserver(() => {
-    const box = $('#jarBox');
-    const sig = box.clientWidth + 'x' + box.clientHeight;
-    if (sig === lastBox || !box.clientWidth) return;
-    lastBox = sig;
-    if (fitJar(todayJar, box)) todayJar.setData(state.todayBalls);
-  }).observe($('#jarBox'));
+  // dopasuj słoiki, gdy zmieni się dostępne miejsce (obrót ekranu, klawiatura itp.)
+  const sizes = {};
+  const ro = new ResizeObserver((entries) => {
+    for (const en of entries) {
+      const el = en.target;
+      const sig = el.clientWidth + 'x' + el.clientHeight;
+      if (sizes[el.id] === sig || !el.clientWidth) continue;
+      sizes[el.id] = sig;
+      if (el.id === 'meSlot' && fitJar(todayJar, el)) todayJar.setData(state.todayBalls);
+      if (el.id === 'partnerSlot' && paired() && fitJar(partnerJar, el)) partnerJar.setData(state.partnerToday);
+    }
+  });
+  ro.observe($('#meSlot'));
+  ro.observe($('#partnerSlot'));
 
   let resizeTimer = 0;
   window.addEventListener('resize', () => {
@@ -810,11 +1095,20 @@ async function init() {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) checkNewDay(); });
 
   await loadToday();
+  if (state.pair) startSync();
 }
 
 init().catch((e) => toast('Błąd uruchomienia: ' + e.message));
 
 if ('serviceWorker' in navigator) {
+  // po aktualizacji aplikacji przeładuj raz, żeby od razu działała nowa wersja
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloading) return;
+    reloading = true;
+    location.reload();
+  });
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./service-worker.js').catch(() => {});
   });

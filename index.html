@@ -22,10 +22,21 @@
         </header>
 
         <div id="jarBox" class="jar-box">
-          <canvas id="jarCanvas" role="img" aria-label="Słoik z dzisiejszymi kulkami"></canvas>
+          <div class="jar-col" id="meCol">
+            <div class="who" id="meName" hidden></div>
+            <div class="jar-slot" id="meSlot">
+              <canvas id="jarCanvas" role="img" aria-label="Twój słoik"></canvas>
+            </div>
+            <div class="counts" id="todayCounts"></div>
+          </div>
+          <div class="jar-col" id="partnerCol" hidden>
+            <div class="who partner" id="partnerName"></div>
+            <div class="jar-slot" id="partnerSlot">
+              <canvas id="partnerCanvas" role="img" aria-label="Słoik drugiej osoby"></canvas>
+            </div>
+            <div class="counts" id="partnerCounts"></div>
+          </div>
         </div>
-
-        <div class="counts" id="todayCounts"></div>
 
         <div class="ball-buttons">
           <button class="ball-btn blue" data-color="blue">
@@ -59,14 +70,58 @@
           <span>Pn</span><span>Wt</span><span>Śr</span><span>Cz</span><span>Pt</span><span>So</span><span>Nd</span>
         </div>
         <div id="calGrid" class="cal-grid"></div>
-        <p class="hint">Kliknij dzień, żeby zobaczyć jego słoik.</p>
+        <p class="hint" id="calHint">Kliknij dzień, żeby zobaczyć jego słoik.</p>
+      </section>
+
+      <!-- ===== RAZEM ===== -->
+      <section id="view-together" class="view" aria-label="Wspólny słoik">
+        <header class="top">
+          <h1>Razem</h1>
+          <p class="sub">Dwa słoiki obok siebie, każde na swoim telefonie.</p>
+        </header>
+
+        <!-- brak konfiguracji Firebase -->
+        <div id="tgNoConfig" class="card muted-card" hidden>
+          <p><b>Tryb „Razem” nie jest jeszcze skonfigurowany.</b></p>
+          <p>Trzeba uzupełnić plik <code>firebase-config.js</code> danymi z konsoli Firebase. Słoik działa normalnie w trybie solo.</p>
+        </div>
+
+        <!-- nie połączono -->
+        <div id="tgSetup" hidden>
+          <div class="card">
+            <label class="field-label" for="tgName">Twoje imię (zobaczy je druga osoba)</label>
+            <input id="tgName" class="field" type="text" maxlength="30" placeholder="np. Wojtek" autocomplete="off">
+            <button id="tgCreate" class="primary big">✨ Utwórz wspólny słoik</button>
+          </div>
+          <div class="card">
+            <label class="field-label" for="tgCode">Masz kod od kogoś? Wpisz go:</label>
+            <input id="tgCode" class="field code" type="text" maxlength="24" placeholder="XXXX-XXXX-XXXX-XXXX" autocomplete="off" autocapitalize="characters" spellcheck="false">
+            <button id="tgJoin" class="secondary big">🔗 Dołącz</button>
+          </div>
+        </div>
+
+        <!-- połączono -->
+        <div id="tgPaired" hidden>
+          <div class="card">
+            <p class="data-info" id="tgStatus"></p>
+            <p class="muted">Kod wspólnego słoika:</p>
+            <p class="room-code" id="tgRoom"></p>
+            <button id="tgShare" class="primary big">↗ Wyślij kod</button>
+            <button id="tgCopy" class="secondary big">⧉ Kopiuj kod</button>
+          </div>
+          <div class="card muted-card">
+            <p>Każde z Was wrzuca kulki do swojego słoika. Widzicie oba na ekranie Dziś i w kalendarzu.</p>
+            <p>Bez internetu wszystko działa dalej, a kulki wyślą się, gdy telefon złapie sieć.</p>
+            <button id="tgLeave" class="ghost big">Opuść wspólny słoik</button>
+          </div>
+        </div>
       </section>
 
       <!-- ===== KOPIA ===== -->
       <section id="view-backup" class="view" aria-label="Kopia zapasowa">
         <header class="top">
           <h1>Kopia zapasowa</h1>
-          <p class="sub">Dane są tylko na tym telefonie.</p>
+          <p class="sub">Twoje kulki są zapisane w tym telefonie.</p>
         </header>
 
         <div class="card">
@@ -91,6 +146,7 @@
     <nav class="tabs" aria-label="Nawigacja">
       <button class="tab active" data-view="today"><span class="ico">🫙</span>Dziś</button>
       <button class="tab" data-view="calendar"><span class="ico">📅</span>Kalendarz</button>
+      <button class="tab" data-view="together"><span class="ico">👥</span>Razem</button>
       <button class="tab" data-view="backup"><span class="ico">💾</span>Kopia</button>
     </nav>
   </div>
@@ -116,10 +172,22 @@
         <p id="daySub" class="sub"></p>
       </div>
     </header>
-    <div id="dayJarBox" class="jar-box day-jar">
-      <canvas id="dayCanvas" role="img" aria-label="Słoik z wybranego dnia"></canvas>
+    <div class="jar-box day-jar">
+      <div class="jar-col">
+        <div class="who" id="dayMeName" hidden></div>
+        <div class="jar-slot" id="dayMeSlot">
+          <canvas id="dayCanvas" role="img" aria-label="Twój słoik z wybranego dnia"></canvas>
+        </div>
+        <div class="counts" id="dayCounts"></div>
+      </div>
+      <div class="jar-col" id="dayPartnerCol" hidden>
+        <div class="who partner" id="dayPartnerName"></div>
+        <div class="jar-slot" id="dayPartnerSlot">
+          <canvas id="dayPartnerCanvas" role="img" aria-label="Słoik drugiej osoby z wybranego dnia"></canvas>
+        </div>
+        <div class="counts" id="dayPartnerCounts"></div>
+      </div>
     </div>
-    <div class="counts" id="dayCounts"></div>
     <ul id="dayList" class="ball-list"></ul>
   </div>
 
